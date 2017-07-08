@@ -1,0 +1,3 @@
+﻿C:\Program Files (x86)\MSBuild\Microsoft.Cpp\v4.0\V140\Microsoft.CppBuild.targets(400,5): warning MSB8029: The Intermediate directory or Output directory cannot reside under the Temporary directory as it could lead to issues with incremental build.
+  main.cpp
+  simpleTicTock.vcxproj -> C:\Users\lee\Source\Repos\LwDCS\simpleTicTock\Debug\simpleTicTock.exe
