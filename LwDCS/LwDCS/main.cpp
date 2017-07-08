@@ -1,4 +1,11 @@
 
+/*
+ *	TODO:
+ *   1. 시간 개념 만들기 -> 
+ *   2. 스케줄러 만들기  -> 
+ *	 3. 따로.,.? 같이..?
+ */
+
 #include <stdio.h>
 #include <string>
 #include <iostream>
@@ -7,17 +14,17 @@
 using namespace std;
 
 class Signal {
+public:
 	unsigned int TxModulecount;
 	unsigned int RouteModulecount;
 	unsigned int RxModulecount;
 };
 
 class Msg : public Signal {
-
 public:
 	int tmpMsg;
+	int tmpMsg2;
 };
-
 
 class Module {
 public:
@@ -25,35 +32,46 @@ public:
 	/*
 	* 본 Class만 수정할 변수.
 	*/
-	string name;                        //모듈 이름
-	uint32_t number;                    //모듈 번호
-	bool isBusy = false;                //지금 바쁜가?
-	bool isTask = true;                 //더이상 처리할 것이 없는가?
-	Module *Connection;                 //연결된 곳
-	Msg *TxFIFO;                        //크기가 1인 송신용 FIFO
-	Msg *RxFIFO;                        //크기가 1인 수신용 FIFO
+	string name;									//모듈 이름
+	uint32_t number;								//모듈 번호
+	bool isBusy = false;							//지금 바쁜가?
+	bool isTask = true;								//더이상 처리할 것이 없는가?
+	
+	/*
+	* 본 Class만 수정할 Class
+	*/
+	Module *Connection;								   //연결된 곳
+	Msg *TxFIFO;									   //크기가 1인 송신용 FIFO
+	Msg *RxFIFO;									   //크기가 1인 수신용 FIFO
 
-										/*
-										* 다른 Class도 수정할 변수.
-										*/
-	bool isTxIRQ = false;               //이벤트가 일어났는지 체크
+	/*
+	* 다른 Class도 수정할 변수.
+	*/
+	bool isTxIRQ = false;							    //이벤트가 일어났는지 체크
 	bool isRxIRQ = false;
-	Msg *IRQMsg;                        //이벤트로 일어난 임시 메시지
 
-										/*
-										* 테스트용 변수
-										*/
-	int count = 0;                     //보낸 횟수
+	/*
+	* 다른 Class도 수정할 Class
+	*/
+	Msg *IRQMsg;									 //이벤트로 일어난 임시 메시지
 
+	/*
+	* 애플리케이션용 변수
+	*/
+	int count = 0;									//보낸 횟수
+
+	/*
+	 * Modul 관련 함수들
+	 */
 	Module();
-	void Init();
-	void txMsg(Msg *TxFIFO);
-	void rxMsg(Msg *RxFIFO);
-	void setConnection(Module *Connection);
+	void Init();									//생성자
+	void txMsg(Msg *TxFIFO);						//메세지 송신
+	void rxMsg(Msg *RxFIFO);						//메세지 수신
+	void setConnection(Module *Connection);			//모듈 연결
 
-	void vTask();
-	void vTaskOver();
-	bool getIsTask();
+	void vTask();									//프로세스 역할을 하는 테스크
+	void vTaskOver();								//개별 테스크 끝을 알림
+	bool getIsTask();								//현재 테스크의 상황을 확인
 
 };
 
