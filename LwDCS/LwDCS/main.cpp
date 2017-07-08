@@ -15,8 +15,7 @@ class Signal {
 class Msg : public Signal {
 
 public:
-	int Msg;
-
+	int tmpMsg;
 };
 
 
@@ -92,7 +91,7 @@ bool Module::getIsTask()
 void Module::Init()
 {
 	if (!this->name.compare("Module1")) {
-		this->TxFIFO->Msg = 100;
+		this->TxFIFO->tmpMsg = 100;
 		this->txMsg(this->TxFIFO);
 	}
 }
@@ -110,14 +109,14 @@ void Module::rxMsg(Msg *IRQMsg)
 	if (this->isRxIRQ == true)
 	{
 		this->RxFIFO = IRQMsg;           //메시지 복사
-		this->RxFIFO->Msg++;
+		this->RxFIFO->tmpMsg++;
 		this->isRxIRQ = false;
 		this->count++;
 
 		cout << this->name << "/rxMsg(name)" << endl;
 		cout << this->isRxIRQ << "/rxMsg(isRxIRQ)" << endl;
 		cout << this->count << "/rxMsg(count)" << endl;
-		cout << this->RxFIFO->Msg << "/rxMsg(Msg)\r\n\r\n" << endl;
+		cout << this->RxFIFO->tmpMsg << "/rxMsg(Msg)\r\n\r\n" << endl;
 
 		this->TxFIFO = this->RxFIFO;
 		txMsg(this->TxFIFO);
