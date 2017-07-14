@@ -18,13 +18,282 @@ enum isSchedule {
 };
 
 /*
-* 시뮬레이션을 위한 전역 변수
+* 전역변수 : 시뮬레이션을 위한 전역변수
 */
 
-long long global_under_Sec = 0;
-long long global_upper_Sec = 0;
-int sizeModule = 0;;
-int nowSechduleNumber = 0;
+uint64_t global_under_Sec = 0;					//long long 
+uint64_t global_upper_Sec = 0;					//long long 
+uint32_t sizeModule = 0;						//int
+uint32_t nowSechduleNumber = 0;					//int
+
+/*
+* Calss: 메시지를 위한 클래스
+		 메시지에 대한 클래스가 가장 먼저 Include 되어야 함.
+*/
+
+class Signal {
+public:
+	uint64_t maked_under_Sec = 0;					//메시지가 만들어진 under_Sec / 초기에만 바꾸고 절대 바꾸지 않음 / long long
+	uint64_t maked_upper_Sec = 0;					//메시지가 만들어진 upper_Sec / 초기에만 바꾸고 절대 바꾸지 않음 / long long
+	
+	uint64_t processed_under_Sec = 0;				//메시지가 가장 최근에 처리된 under_Sec / 즉, 여러 Hop을 걸칠때마다 변경 / long long
+	uint64_t processed_upper_Sec = 0;				//메시지가 가장 최근에 처리된 upper_Sec / 즉, 여러 Hop을 걸칠때마다 변경 / long long
+};
+
+class Msg : public Signal {
+public:
+	uint32_t tmpMsg;	// int
+};
+
+//--------------------------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------------------------
+
+
+/*
+* Calss: 모듈을 위한 클래스
+*/
+class Module {
+public:
+
+	/*
+	* 본 Class만 수정할 변수.
+	*/
+	string name;									//모듈 이름
+	uint32_t number;								//모듈 번호
+	bool isBusy = false;							//지금 바쁜가?
+	bool isTask = true;								//더이상 처리할 것이 없는가?
+	isSchedule isTxSchedule = NO;						//스케줄링 차례인가?
+	isSchedule isRxSchedule = NO;
+
+	uint64_t schedule_under_Sec = 0;				//처리해야할 under_Sec	/ long long
+	uint64_t schedule_upper_Sec = 0;				//처리해야할 upper_Sec	/ long long
+	
+	
+	uint64_t process_delay = 0;						//처리 지연
+	uint64_t queueing_delay = 0;					//큐잉 딜레이
+	uint64_t transfer_delay = 1000;					//(L.bit/R.bps) , 1ns
+	uint64_t propagation_delay = 0;					//전파지연
+
+	/*
+	* 본 Class만 수정할 Class
+	*/
+	Module *Connection;								   //연결된 곳
+	Msg *TxFIFO;									   //크기가 1인 송신용 FIFO
+	Msg *RxFIFO;									   //크기가 1인 수신용 FIFO
+
+	/*
+	* 다른 Class도 수정할 변수.
+	*/
+	bool isTxIRQ = false;
+	bool isRxIRQ = false;
+
+
+	/*
+	* 다른 Class도 수정할 Class
+	*/
+	Msg *IRQMsg;									 //이벤트로 일어난 임시 메시지
+
+	/*
+	* 애플리케이션용 변수
+	*/
+	uint32_t RxCount = 0;								//보낸 횟수 / int
+
+	/*
+	* Modul 관련 함수들
+	*/
+	Module(string name, uint32_t number);
+	void Init();															//생성자
+	void txMsg(Msg *TxFIFO, uint64_t delay);								//메세지 송신
+	void rxMsg(Msg *RxFIFO);												//메세지 수신
+	void setConnection(Module *Connection);									//모듈 연결
+	void setScheduleTime(uint64_t upper_Sec, uint64_t under_Sec);			//나의 다음 스케줄 시간
+	uint64_t getScheduleTime(bool under_upper_Sec);
+	void vTask();															//프로세스 역할을 하는 테스크
+	void vTaskOver();														//개별 테스크 끝을 알림
+	bool getIsTask();														//현재 테스크의 상황을 확인
+	uint32_t getNumber();
+};
+
+uint32_t Module::getNumber() {
+	return this->number;
+}
+
+Module::Module(string name, uint32_t number) {
+	this->name = name;
+	this->number = number;
+	this->TxFIFO = new Msg();
+	this->RxFIFO = new Msg();
+	this->IRQMsg = new Msg();
+}
+
+void Module::Init()
+{
+	if (!this->name.compare("Module1")) {
+		//생성된 시간을 저장한다.
+		this->TxFIFO->tmpMsg = 100;
+		this->TxFIFO->maked_under_Sec = 500;
+		this->TxFIFO->maked_upper_Sec = 0;
+		this->TxFIFO->processed_under_Sec = this->TxFIFO->maked_under_Sec;
+		this->TxFIFO->processed_upper_Sec = this->TxFIFO->maked_upper_Sec;
+
+		isTxIRQ = true;
+		this->txMsg(this->TxFIFO, 500);
+	}
+
+	if (!this->name.compare("Module3")) {
+		//생성된 시간을 저장한다.
+		this->TxFIFO->tmpMsg = 200;
+		this->TxFIFO->maked_under_Sec = 0;
+		this->TxFIFO->maked_upper_Sec = 0;
+		this->TxFIFO->processed_under_Sec = 0;
+		this->TxFIFO->processed_under_Sec = 0;
+
+		isTxIRQ = true;
+		this->txMsg(this->TxFIFO, 0);
+	}
+}
+
+void Module::vTaskOver()
+{
+	this->isTask = false;
+}
+
+bool Module::getIsTask()
+{
+	return this->isTask;
+}
+
+/*
+Module::txMsg
+1. 송신할 메시지가 있는지 판단한다.
+2. 메시지를 송신할 시간이 정해져 있는지 판단한다.
+NO : 메시지를 송신할 시간이 정해져 있지 않는 경우이다.
+YES : 메시지를 송신할 시간이 정해진 경우이다.
+스케줄러는 이벤트를 발생할 모듈의 번호를 함께 남기는 데, 이게 자신의 모듈과 일치하고
+현재의 상태가 YES이면 PROCESS 상태로 바꾼다.
+PROCESS : 송신할 메시지를 처리한다.
+3. 커네셕인 무엇인지 확인하고 딜레이를 계산한다. 현재는 1ns를 추가한 것
+4. 커넥션이 어딘지 확인한다.   this->Connection
+5. 커넥션 된 곳의 수신되고 있는 메시지를 바꾸어준다.
+*/
+void Module::txMsg(Msg *TxFIFO, uint64_t delay)
+{
+	if (isTxIRQ)
+	{
+		if (isTxSchedule == NO)
+		{
+			this->schedule_under_Sec = global_under_Sec + delay;			//강제 딜레이
+			this->schedule_upper_Sec = global_upper_Sec;
+			isTxSchedule = YES;
+		}
+
+		else if (isTxSchedule == PROCESS && schedule_under_Sec == global_under_Sec && schedule_upper_Sec == schedule_upper_Sec)
+		{
+			//cout << this->name << "/TxMsg(name)" << endl << endl;
+			this->Connection->IRQMsg = TxFIFO;
+			this->Connection->IRQMsg->processed_under_Sec += transfer_delay;			//전송 지연
+			this->Connection->IRQMsg->processed_under_Sec += propagation_delay;			//전파 딜레이
+			this->Connection->isRxIRQ = true;
+			isTxIRQ = false;
+			isTxSchedule = NO;
+		}
+	}
+}
+
+/*
+Module::rxMsg
+1. 송신할 메시지가 있는지 판단한다.
+2. 메시지를 송신할 시간이 정해져 있는지 판단한다.
+NO : 메시지를 송신할 시간이 정해져 있지 않는 경우이다.
+YES : 메시지를 송신할 시간이 정해진 경우이다.
+스케줄러는 이벤트를 발생할 모듈의 번호를 함께 남기는 데, 이게 자신의 모듈과 일치하고
+현재의 상태가 YES이면 PROCESS 상태로 바꾼다.
+PROCESS : 송신할 메시지를 처리한다.
+*/
+void Module::rxMsg(Msg *IRQMsg)
+{
+	if (this->isRxIRQ)
+	{
+		//시간을 안정했다면, 시간을 정한다.
+		//시간이 정해져 있다면, 스케줄러가 검사할 것이다. YES인 경우를!
+		//PROCESS가 되면 내가 처리할 순서라는 것이다.
+		if (isRxSchedule == NO)
+		{
+			this->schedule_under_Sec = IRQMsg->processed_under_Sec;
+			this->schedule_upper_Sec = IRQMsg->processed_upper_Sec;
+			isRxSchedule = YES;
+		}
+
+		else if (isRxSchedule == PROCESS && schedule_under_Sec == global_under_Sec && schedule_upper_Sec == schedule_upper_Sec)
+		{
+			this->RxFIFO = IRQMsg;										/* 메시지 복사 */
+			this->RxFIFO->tmpMsg++;
+			this->isRxIRQ = false;
+			this->RxCount++;
+
+			cout << this->name << "/rxMsg(name)" << endl;
+			cout << this->isRxIRQ << "/rxMsg(isRxIRQ)" << endl;
+			cout << this->RxCount << "/rxMsg(count)" << endl;
+			cout << this->RxFIFO->tmpMsg << "/rxMsg(Msg)" << endl;
+			cout << this->RxFIFO->processed_under_Sec << "/rxSecond(pSec)\r\n\r\n" << endl;
+
+			this->TxFIFO = this->RxFIFO;
+
+			isTxIRQ = true;
+			txMsg(this->TxFIFO, 0);
+			isRxSchedule = NO;
+		}
+	}
+}
+
+void Module::setConnection(Module *Connection) {
+	this->Connection = Connection;
+}
+
+void Module::setScheduleTime(uint64_t upper_Sec, uint64_t under_Sec) {
+	this->schedule_under_Sec = under_Sec;			//1pSec : 1nSec : 1uSec : 1000mSec
+	this->schedule_upper_Sec = upper_Sec;			//11Day : 13Hour : 46Minute : 40Sec
+}
+
+uint64_t Module::getScheduleTime(bool under_upper_Sec) {
+	if (!under_upper_Sec) return this->schedule_under_Sec;
+	else if (under_upper_Sec) return this->schedule_upper_Sec;
+	else return 0;
+};
+
+/*
+Module::vTask
+1. 모듈이 이벤트를 발생해도 되는지 판단한다.
+2. txMsg와 rxMsg를 통해, 송신 및 수신 스케줄 시간을 정한다.
+*/
+void Module::vTask() {
+	if (this->number == nowSechduleNumber)
+	{
+		if (isTxSchedule == YES)
+			isTxSchedule = PROCESS;
+		if (isRxSchedule == YES)
+			isRxSchedule = PROCESS;
+
+		this->number = 0;
+	}
+
+	this->txMsg(this->TxFIFO, 0);
+	this->rxMsg(this->IRQMsg);
+
+	//테스크 종료 조건에 부합하면, return!
+	if (this->RxCount == 1)
+	{
+		vTaskOver();
+		return;
+	}
+}
+
+//--------------------------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------------------------
+
+
 /*
 * Calss: 스케줄러를 위한 클래스
 */
@@ -34,9 +303,9 @@ class infoModule
 public:
 	infoModule* next;
 	string name;
-	int number;
-	long long under_Sec;
-	long long upper_Sec;
+	uint32_t number;
+	uint64_t under_Sec;
+	uint64_t upper_Sec;
 };
 
 class vScheduler {
@@ -46,11 +315,13 @@ public:
 	int length;
 
 	vScheduler();
-	void addNode(int number, long long upper_Sec, long long under_Sec);
+	void addNode(Module* tmpModule);
 	int getLength();
 	void deleteList();
 	void printAllData();
 	void compareTime();
+	void calTime();
+	void printTime();
 };
 
 vScheduler::vScheduler() {
@@ -59,26 +330,29 @@ vScheduler::vScheduler() {
 	this->tail = NULL;
 }
 
-void vScheduler::addNode(int number, long long upper_Sec, long long under_Sec) {
+void vScheduler::addNode(Module* tmpModule) {
 	infoModule* node = new infoModule();
-	if (length == 0)
+	if (tmpModule->isTxIRQ == true || tmpModule->isRxIRQ == true)
 	{
-		this->head = node;
-		this->tail = node;
-		this->head->upper_Sec = upper_Sec;
-		this->head->under_Sec = under_Sec;
-		this->head->number = number;
-		this->length++;
-	}
+		if (length == 0)
+		{
+			this->head = node;
+			this->tail = node;
+			this->head->upper_Sec = tmpModule->getScheduleTime(1);
+			this->head->under_Sec = tmpModule->getScheduleTime(0);
+			this->head->number = tmpModule->getNumber();
+			this->length++;
+		}
 
-	else
-	{
-		this->tail->next = node;
-		this->tail = node;
-		this->tail->upper_Sec = upper_Sec;
-		this->tail->under_Sec = under_Sec;
-		this->tail->number = number;
-		this->length++;
+		else
+		{
+			this->tail->next = node;
+			this->tail = node;
+			this->tail->upper_Sec = tmpModule->getScheduleTime(1);
+			this->tail->under_Sec = tmpModule->getScheduleTime(0);
+			this->tail->number = tmpModule->getNumber();
+			this->length++;
+		}
 	}
 }
 
@@ -116,13 +390,15 @@ void vScheduler::compareTime() {
 	infoModule* min_upper_Sec_Array;
 	infoModule* min_under_Sec_Array;
 
-	long long min_upper_Sec = 10000000000000;
-	int size_min_upper_Sec = 0;
 
-	long long min_under_Sec = 10000000000000;
-	int size_min_under_Sec = 0;
+	int64_t min_upper_Sec = INT64_MAX;			//was. long long min_upper_Sec = 10000000000000;
+	int32_t size_min_upper_Sec = 0;
 
-	int tmpsize = 0;
+	int64_t min_under_Sec = INT64_MAX;			//was. long long min_under_Sec = 10000000000000;
+	int32_t size_min_under_Sec = 0;
+
+	int32_t tmpsize = 0;
+	
 	//upper Second 최소값 검색
 	tmpHead = this->head;
 	while (tmpHead)
@@ -197,14 +473,16 @@ void vScheduler::compareTime() {
 		}
 	}
 
-	//global_upper_Sec = min_upper_Sec_Array[0].upper_Sec;
-	//global_under_Sec = min_upper_Sec_Array[0].under_Sec;
+	//새로 스케줄링된 작업이 전역 시간보다 작다면, 잘못된 처리이므로 예외 처리 추가.
 	if(global_upper_Sec <= min_under_Sec_Array[0].upper_Sec && global_under_Sec <= min_under_Sec_Array[0].under_Sec)
 	{
 		global_upper_Sec = min_under_Sec_Array[0].upper_Sec;
 		global_under_Sec = min_under_Sec_Array[0].under_Sec;
 		nowSechduleNumber = min_under_Sec_Array[0].number;
-		cout << global_under_Sec << "Global Under Sec" << endl;
+
+		this->calTime();
+		this->printTime();
+		//cout << global_under_Sec << "Global Under Sec" << endl;
 	}
 	// 초기화
 
@@ -221,261 +499,48 @@ void vScheduler::compareTime() {
 	*/
 };
 
-
-
-/*
-* Calss: 메시지를 위한 클래스
-*/
-
-class Signal {
-public:
-	long long maked_under_Sec = 0;					//메시지가 만들어진 under_Sec / 초기에만 바꾸고 절대 바꾸지 않음
-	long long maked_upper_Sec = 0;					//메시지가 만들어진 upper_Sec / 초기에만 바꾸고 절대 바꾸지 않음
-
-	long long processed_under_Sec = 0;				//메시지가 가장 최근에 처리된 under_Sec / 즉, 여러 Hop을 걸칠때마다 변경
-	long long processed_upper_Sec = 0;				//메시지가 가장 최근에 처리된 upper_Sec / 즉, 여러 Hop을 걸칠때마다 변경
+void vScheduler::calTime() {
+	long temp_Sec = global_under_Sec / (1000 * 1000 * 1000 * 1000);
+	global_upper_Sec += temp_Sec;
+	global_under_Sec = global_under_Sec % (1000 * 1000 * 1000 * 1000);
 };
 
-class Msg : public Signal {
-public:
-	int tmpMsg;
+void vScheduler::printTime() {
+	//#1. Under Sec 계산
+	long mSec = global_under_Sec / (1000 * 1000 * 1000);
+	long under_mSec = global_under_Sec % (1000 * 1000 * 1000);
+
+	long uSec = under_mSec / (1000 * 1000);
+	long under_uSec = under_mSec % (1000 * 1000);
+
+	long nSec = under_uSec / (1000);
+	long under_nSec = under_uSec % (1000);
+
+	long pSec = under_nSec;
+
+	// ---Upper Sec 계산
+
+	long Day = global_upper_Sec / (60 * 60 * 24);
+	long under_Day = global_upper_Sec % (60 * 60 * 24);
+
+	long Hour = under_Day / (60 * 60);
+	long under_Hour = under_Day % (60 * 60);
+
+	long Minute = under_Hour / (60);
+	long under_Minute = under_Hour % (60);;
+
+	long Sec = under_Minute;
+
+	cout.width(3); cout.fill('0'); cout << Day << "Day | ";
+	cout.width(3); cout.fill('0'); cout << Hour << "Hour | ";
+	cout.width(3); cout.fill('0'); cout << Minute << "Minute | ";
+	cout.width(3); cout.fill('0'); cout << Sec << "Sec | ";
+
+	cout.width(3); cout.fill('0'); cout << mSec << "mSec | ";
+	cout.width(3); cout.fill('0'); cout << uSec << "uSec | ";
+	cout.width(3); cout.fill('0'); cout << nSec << "nSec | ";
+	cout.width(3); cout.fill('0'); cout << pSec << "pSec | ";
 };
-
-/*
-* Calss: 모듈을 위한 클래스
-*/
-class Module {
-public:
-
-	/*
-	* 본 Class만 수정할 변수.
-	*/
-	string name;									//모듈 이름
-	uint32_t number;								//모듈 번호
-	bool isBusy = false;							//지금 바쁜가?
-	bool isTask = true;								//더이상 처리할 것이 없는가?
-	isSchedule isTxSchedule = NO;						//스케줄링 차례인가?
-	isSchedule isRxSchedule = NO;
-
-	long long schedule_under_Sec = 0;				//처리해야할 under_Sec
-	long long schedule_upper_Sec = 0;				//처리해야할 upper_Sec
-	long long delay = 0;							//딜레이 계산
-
-													/*
-													* 본 Class만 수정할 Class
-													*/
-	Module *Connection;								   //연결된 곳
-	Msg *TxFIFO;									   //크기가 1인 송신용 FIFO
-	Msg *RxFIFO;									   //크기가 1인 수신용 FIFO
-
-													   /*
-													   * 다른 Class도 수정할 변수.
-													   */
-	bool isTxIRQ = false;
-	bool isRxIRQ = false;
-
-
-	/*
-	* 다른 Class도 수정할 Class
-	*/
-	Msg *IRQMsg;									 //이벤트로 일어난 임시 메시지
-
-													 /*
-													 * 애플리케이션용 변수
-													 */
-	int RxCount = 0;									//보낸 횟수
-
-													/*
-													* Modul 관련 함수들
-													*/
-	Module(string name, int number);
-	void Init();															//생성자
-	void txMsg(Msg *TxFIFO, long long delay);												//메세지 송신
-	void rxMsg(Msg *RxFIFO);												//메세지 수신
-	void setConnection(Module *Connection);									//모듈 연결
-	void setScheduleTime(long long upper_Sec, long long under_Sec);				//나의 다음 스케줄 시간
-	long long getScheduleTime(bool under_upper_Sec);
-	void vTask();															//프로세스 역할을 하는 테스크
-	void vTaskOver();														//개별 테스크 끝을 알림
-	bool getIsTask();														//현재 테스크의 상황을 확인
-	int getNumber();
-
-};
-
-int Module::getNumber() {
-	return this->number;
-}
-
-Module::Module(string name, int number) {
-	this->name = name;
-	this->number = number;
-	this->TxFIFO = new Msg();
-	this->RxFIFO = new Msg();
-	this->IRQMsg = new Msg();
-}
-
-void Module::Init()
-{
-	if (!this->name.compare("Module1")) {
-		//생성된 시간을 저장한다.
-		this->TxFIFO->tmpMsg = 100;
-		this->TxFIFO->maked_under_Sec = 500;
-		this->TxFIFO->maked_upper_Sec = 0;
-		this->TxFIFO->processed_under_Sec = this->TxFIFO->maked_under_Sec;
-		this->TxFIFO->processed_upper_Sec = this->TxFIFO->maked_upper_Sec;
-
-		isTxIRQ = true;
-		this->txMsg(this->TxFIFO, 500);
-	}
-
-	if (!this->name.compare("Module3")) {
-		//생성된 시간을 저장한다.
-		this->TxFIFO->tmpMsg = 200;
-		this->TxFIFO->maked_under_Sec = 0;
-		this->TxFIFO->maked_upper_Sec = 0;
-		this->TxFIFO->processed_under_Sec = 0;
-		this->TxFIFO->processed_under_Sec = 0;
-
-		isTxIRQ = true;
-		this->txMsg(this->TxFIFO, 0);
-	}
-}
-
-void Module::vTaskOver()
-{
-	this->isTask = false;
-}
-
-bool Module::getIsTask()
-{
-	return this->isTask;
-}
-
-/*
-	Module::txMsg
-	1. 송신할 메시지가 있는지 판단한다.
-	2. 메시지를 송신할 시간이 정해져 있는지 판단한다.
-		NO : 메시지를 송신할 시간이 정해져 있지 않는 경우이다.
-		YES : 메시지를 송신할 시간이 정해진 경우이다.
-			  스케줄러는 이벤트를 발생할 모듈의 번호를 함께 남기는 데, 이게 자신의 모듈과 일치하고
-			  현재의 상태가 YES이면 PROCESS 상태로 바꾼다.
-		PROCESS : 송신할 메시지를 처리한다.
-	3. 커네셕인 무엇인지 확인하고 딜레이를 계산한다. 현재는 1ns를 추가한 것
-	4. 커넥션이 어딘지 확인한다.   this->Connection
-	5. 커넥션 된 곳의 수신되고 있는 메시지를 바꾸어준다.
-*/
-void Module::txMsg(Msg *TxFIFO, long long delay)
-{
-	if (isTxIRQ)
-	{
-		if (isTxSchedule == NO)
-		{
-			this->schedule_under_Sec = global_under_Sec + delay;			//강제 딜레이
-			this->schedule_upper_Sec = global_upper_Sec;
-			isTxSchedule = YES;
-		}
-
-		else if (isTxSchedule == PROCESS && schedule_under_Sec == global_under_Sec && schedule_upper_Sec == schedule_upper_Sec)
-		{
-			//cout << this->name << "/TxMsg(name)" << endl << endl;
-			this->Connection->IRQMsg = TxFIFO;
-			this->Connection->IRQMsg->processed_under_Sec += 1000;			//전파 딜레이
-			this->Connection->isRxIRQ = true;
-			isTxIRQ = false;
-			isTxSchedule = NO;
-		}
-	}
-
-}
-
-/*
-	Module::rxMsg
-	1. 송신할 메시지가 있는지 판단한다.
-	2. 메시지를 송신할 시간이 정해져 있는지 판단한다.
-		NO : 메시지를 송신할 시간이 정해져 있지 않는 경우이다.
-		YES : 메시지를 송신할 시간이 정해진 경우이다.
-		스케줄러는 이벤트를 발생할 모듈의 번호를 함께 남기는 데, 이게 자신의 모듈과 일치하고
-		현재의 상태가 YES이면 PROCESS 상태로 바꾼다.
-		PROCESS : 송신할 메시지를 처리한다.
-*/
-void Module::rxMsg(Msg *IRQMsg)
-{
-	if (this->isRxIRQ)
-	{
-		//시간을 안정했다면, 시간을 정한다.
-		//시간이 정해져 있다면, 스케줄러가 검사할 것이다. YES인 경우를!
-		//PROCESS가 되면 내가 처리할 순서라는 것이다.
-		if (isRxSchedule == NO)
-		{
-			this->schedule_under_Sec = IRQMsg->processed_under_Sec;
-			this->schedule_upper_Sec = IRQMsg->processed_upper_Sec;
-			isRxSchedule = YES;
-		}
-
-		else if (isRxSchedule == PROCESS && schedule_under_Sec == global_under_Sec && schedule_upper_Sec == schedule_upper_Sec)
-		{
-			this->RxFIFO = IRQMsg;										/* 메시지 복사 */
-			this->RxFIFO->tmpMsg++;
-			this->isRxIRQ = false;
-			this->RxCount++;
-
-			
-			cout << this->name << "/rxMsg(name)" << endl;
-			cout << this->isRxIRQ << "/rxMsg(isRxIRQ)" << endl;
-			cout << this->RxCount << "/rxMsg(count)" << endl;
-			cout << this->RxFIFO->tmpMsg << "/rxMsg(Msg)" << endl;
-			cout << this->RxFIFO->processed_under_Sec << "/rxSecond(pSec)\r\n\r\n" << endl;
-			
-			this->TxFIFO = this->RxFIFO;
-
-			isTxIRQ = true;
-			txMsg(this->TxFIFO, 0);
-			isRxSchedule = NO;
-		}
-	}
-}
-
-void Module::setConnection(Module *Connection) {
-	this->Connection = Connection;
-}
-
-void Module::setScheduleTime(long long upper_Sec, long long under_Sec) {
-	this->schedule_under_Sec = under_Sec;			//1pSec : 1nSec : 1uSec : 1000mSec
-	this->schedule_upper_Sec = upper_Sec;			//11Day : 13Hour : 46Minute : 40Sec
-}
-
-long long Module::getScheduleTime(bool under_upper_Sec) {
-	if (!under_upper_Sec) return this->schedule_under_Sec;
-	else if (under_upper_Sec) return this->schedule_upper_Sec;
-	else return 0;
-};
-
-/*
-	Module::vTask
-	1. 모듈이 이벤트를 발생해도 되는지 판단한다.
-	2. txMsg와 rxMsg를 통해, 송신 및 수신 스케줄 시간을 정한다.
-*/
-void Module::vTask() {
-	if (this->number == nowSechduleNumber)
-	{
-		if (isTxSchedule == YES)
-			isTxSchedule = PROCESS;
-		if (isRxSchedule == YES)
-			isRxSchedule = PROCESS;
-
-		this->number = 0;
-	}
-
-	this->txMsg(this->TxFIFO, 0);
-	this->rxMsg(this->IRQMsg);
-	
-	//테스크 종료 조건에 부합하면, return!
-	if (this->RxCount == 1)
-	{
-		vTaskOver();
-		return;
-	}
-}
 
 
 
@@ -528,33 +593,22 @@ int main() {
 		i = 0;
 		Module1->vTask();
 		Module2->vTask();
-
 		Module3->vTask();
 		Module4->vTask();
 
 		//각 모듈 객체를 넘기는 것이 좋을 것으로 판단...
-		if (Module1->isTxIRQ == true || Module1->isRxIRQ == true)
-			myScheduler->addNode(Module1->getNumber(), Module1->getScheduleTime(1), Module1->getScheduleTime(0));
-
-		if (Module2->isTxIRQ == true || Module2->isRxIRQ == true)
-			myScheduler->addNode(Module2->getNumber(), Module2->getScheduleTime(1), Module2->getScheduleTime(0));
-
-		if (Module3->isTxIRQ == true || Module3->isRxIRQ == true)
-			myScheduler->addNode(Module3->getNumber(), Module3->getScheduleTime(1), Module3->getScheduleTime(0));
-
-		if (Module4->isTxIRQ == true || Module4->isRxIRQ == true)
-			myScheduler->addNode(Module4->getNumber(), Module4->getScheduleTime(1), Module4->getScheduleTime(0));
+		myScheduler->addNode(Module1);
+		myScheduler->addNode(Module2);
+		myScheduler->addNode(Module3);
+		myScheduler->addNode(Module4);
 		
 		myScheduler->compareTime();
 		myScheduler = new vScheduler();
 
-
-		// 매번, i는 0이 된다. 그리고 Task를 처리한 후, 자신이 처리할 것이 없다면 Task가 죽은 것으로 판단!
-		// 따라서, 클래스에 포함된 Taskover를 적적힐 사용해야함
-		// 추후 이것은 스케줄러 클래스를 만든 후 조정해야 할듯.
+		// 매번, i는 0이 된다. 그리고 Task를 처리한 후, 모든 테스크가 vTaskOver를 헀다면 처리할 것이 없다고 판단.
+		// 따라서, 클래스에 포함된 Taskover를 적적힐 사용해야함.
 		i += Module1->getIsTask();
 		i += Module2->getIsTask();
-
 		i += Module3->getIsTask();
 		i += Module4->getIsTask();
 		if (i == 0) isOneTask = false;
